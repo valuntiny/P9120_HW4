@@ -1,0 +1,174 @@
+---
+title: "P9120 HW4 answer"
+author: "Guojing Wu | UNI: gw2383"
+date: "11/18/2019"
+output:
+    pdf_document:
+    highlight: default
+    number_sections: true
+    citation_package:
+    keep_tex: false
+    fig_caption: true
+    latex_engine: pdflatex
+fontsize: 10pt
+geometry: margin=1in
+bibliography:
+biblio-style:
+header-includes:
+- \usepackage{indentfirst}
+- \usepackage{graphicx}
+- \usepackage{geometry}
+- \usepackage{subfigure}
+- \usepackage{amsmath}
+- \usepackage{listings}
+- \usepackage{tikz}
+- \usetikzlibrary{matrix}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = "")
+library(tidyverse)
+library(ISLR) # for OJ dataset
+library(tree)
+set.seed(100)
+
+```
+
+## 1. Suppose we produce ten bootstrapped smaples from a data set containing red and green classes. We then apply a classification tree to each bootstrapped sample and, for a specific value of X, produce 10 estimates of P(Class is Red|X):
+
+$$
+0.1, 0.15, 0.2, 0.2, 0.55, 0.6, 0.6, 0.65, 0.7, 0.75
+$$
+
+## There are two common ways to combine these results together into a single class prediction. One is the majority vote approach discussed in this chapter. The second approach is to classify based on the average probability. In this example, what is the final classification under each of these two approaches?
+
+```{r}
+# exercise 1
+x = c(0.1, 0.15, 0.2, 0.2, 0.55, 0.6, 0.6, 0.65, 0.7, 0.75)
+sum.red = sum(x >= 0.5)
+sum.green = sum(x < 0.5)
+x.mean = mean(x)
+
+```
+
+* For majority vote approach, we have `r sum.red` voted for red and `r sum.green` voted for green, so the final classification will be `r ifelse(sum.red >= sum.green, "red", "green")`.
+
+* For average probability approach, we have p = `r x.mean`, so the final classification will be `r ifelse(x.mean >= 0.5, "red", "green")`.
+
+## 2. This problem involves the OJ data set which is part of the ISLR package.
+
+```{r}
+# loading OJ data
+data(OJ)
+OJ = OJ %>% as_tibble()
+
+```
+
+### (a) Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+
+```{r}
+# train test split
+splitIndex = sample(nrow(OJ), 800, replace = F)
+Train = OJ[splitIndex,]
+Test = OJ[-splitIndex,]
+
+```
+
+### (b) Fit a tree to the training data, with Purchase as the response and the other variables as predictors. Use the `summary()` function to produce summary statistics about the tree, and describe the results obtained. What is the training error rate? How many terminal nodes does the tree have?
+
+```{r}
+# modeling
+fit.tree <- tree(Purchase ~ ., data = Train)
+fit.sum <- summary(fit.tree)
+fit.sum
+
+```
+
+The tree only uses 4 variables: `LoyalCH`, `PriceDiff`, `ListPriceDiff` and `SalePriceMM`. The training error rate (miss classification rate) is `r round(fit.sum$misclass[1] / fit.sum$misclass[2], 3)`. The tree has `r fit.sum$size` terminal nodes.
+
+### (c) Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+
+```{r}
+# print the tree
+fit.tree
+
+```
+
+For example, we picked up the terminal node (11), the splitting variable at this node is `PriceDiff`, the splitting value is 0.05. There are 107 points in the subtree below this node. The deviance for all points contained in region below this node is 144.90. The prediction at this node is `Purchase = CH`. About 58.9% points in this node have `Purchase = CH` and about 41.1% points in this node have `Purchase = MM`.
+
+### (d) Create a plot of the tree, and interpret the results.
+
+```{r, dpi = 300}
+# plot the tree
+plot(fit.tree)
+text(fit.tree, pretty = 0)
+
+```
+
+`LoyalCH` may be the most important variable here, when `LoyalCH` < 0.0356415 the tree predicts `Purchase = MM` and when `LoyalCH` > 0.764572 the tree predicts `Purchase = CH`. For intermediate value of `LoyalCH` between 0.0356415 and 0.764572, the prediction also depends on variable `PriceDiff`, `ListPriceDiff` and `SalePriceMM`.
+
+### (e) Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+
+```{r}
+# confusion matrix
+pred.tree = predict(fit.tree, Test, type = "class")
+table(Test$Purchase, pred.tree)
+
+```
+
+The test error rate is `r round(sum(pred.tree != Test$Purchase) / length(Test$Purchase), 3)`.
+
+### (f) Apply the `cv.tree()` function to the training set in order to determine the optimal tree size.
+
+```{r}
+# optimal tree size
+fit.tree.cv <- cv.tree(fit.tree, FUN = prune.tree)
+
+```
+
+### (g) Produce a plot with tree size on the x-axis and cross-validated classification error rate on the y-axis.
+
+```{r, dpi = 300}
+# plot tree size and CV error rate
+plot(fit.tree.cv$size, fit.tree.cv$dev, type = "b", xlab = "Tree Size", ylab = "Deviance")
+
+```
+
+### (h) Which tree size corresponds to the lowest cross-validated classification error rate?
+
+We can't decide based on the plot, because the CV classification error rate decreases through tree size.
+
+### (i) Produce a pruned tree corresponding to the optimal tree size obtained using cross-validation. If cross-validation does not lead to selection of a pruned tree, then create a pruned tree with five terminal nodes.
+
+```{r}
+# pruned tree
+fit.tree.pruned <- prune.tree(fit.tree, best = 5)
+summary(fit.tree.pruned)
+
+```
+
+### (j) Compare the training error rates between the pruned and unpruned trees. Which is higher?
+
+Misclassification error of pruned tree is higher than that of original tree.
+
+### (k) Compare the test error rates between the pruned and unpruned trees. Which is higher?
+
+```{r}
+# compare between pruned tree and unpruned tree
+pred.tree.pruned <- predict(fit.tree.pruned, Test, type = "class")
+
+```
+
+So the test error rates for pruned tree is `r round(sum(pred.tree.pruned != Test$Purchase) / length(Test$Purchase), 3)`, which is higher than the unpruned tree
+
+## 3. On the book website, www.StatLearning.com, there is a gene expression data set (`Ch10Ex11.csv`) that consists of 40 tissue samples with measurements on 1,000 genes. The first 20 samples are from healthy patients, while the second 20 are from a diseased group.
+
+### (a) Load in the data using `read.csv()`. You will need to select `header=F`.
+
+### (b) Apply hierarchical clustering to the samples using correlation-based distance, and plot the dendrogram. Do the genes separate the samples into the two groups? Do your results depend on the type of linkage used?
+
+### (c) Your collaborator wants to know which genes differ the most across the two groups. Suggest a way to answer this question, and apply it here.
+
+## Appendix
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE}
+```
